@@ -40,6 +40,11 @@ func (s *Server) getHttpCallBackRoutes() []Route {
 			Pattern: "/deregistration/:ueid",
 			APIFunc: s.HTTPHandleDeregistrationNotification,
 		},
+		{
+			Method:  http.MethodPost,
+			Pattern: "/smContextStatus/:supi/:pduSessionId",
+			APIFunc: s.HTTPSmContextStatusNotify,
+		},
 	}
 }
 
@@ -188,6 +193,38 @@ func (s *Server) HTTPHandleDeregistrationNotification(c *gin.Context) {
 	// TS 23.503 - 5.3.2.3.2 UDM initiated NF Deregistration
 	// The AMF acknowledges the Nudm_UECM_DeRegistrationNotification to the UDM.
 	c.JSON(http.StatusNoContent, nil)
+}
+
+func (s *Server) HTTPSmContextStatusNotify(c *gin.Context) {
+	var smContextStatusNotification models.SmContextStatusNotification
+
+	requestBody, err := c.GetRawData()
+	if err != nil {
+		logger.CallbackLog.Errorf("Get Request Body error: %+v", err)
+		problemDetail := models.ProblemDetails{
+			Title:  "System failure",
+			Status: http.StatusInternalServerError,
+			Detail: err.Error(),
+			Cause:  "SYSTEM_FAILURE",
+		}
+		c.JSON(http.StatusInternalServerError, problemDetail)
+		return
+	}
+
+	err = openapi.Deserialize(&smContextStatusNotification, requestBody, "application/json")
+	if err != nil {
+		problemDetail := "[Request Body] " + err.Error()
+		rsp := models.ProblemDetails{
+			Title:  "Malformed request syntax",
+			Status: http.StatusBadRequest,
+			Detail: problemDetail,
+		}
+		logger.CallbackLog.Errorln(problemDetail)
+		c.JSON(http.StatusBadRequest, rsp)
+		return
+	}
+
+	s.Processor().HandleSmContextStatusNotify(c, smContextStatusNotification)
 }
 
 // TS 23.502 - 4.2.2.3.3 Network-initiated Deregistration
